@@ -13,11 +13,20 @@ namespace QuickConvertTools
         {
             if (args.Length < 1)
             {
-                Console.Error.WriteLine("Usage: IconGen.exe <output.ico>");
+                Console.Error.WriteLine("Usage: IconGen.exe <output.ico> [--assets <assetsDir>]");
                 return 1;
             }
 
             string outPath = args[0];
+            string assetsDir = null;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--assets", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+                {
+                    assetsDir = args[++i];
+                }
+            }
+
             string dir = Path.GetDirectoryName(outPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
             {
@@ -39,7 +48,29 @@ namespace QuickConvertTools
 
             WriteMultiSizeIco(outPath, sizes, pngFrames);
             Console.WriteLine("Generated icon: " + outPath);
+
+            if (!string.IsNullOrEmpty(assetsDir))
+            {
+                if (!Directory.Exists(assetsDir))
+                {
+                    Directory.CreateDirectory(assetsDir);
+                }
+
+                SavePng(Path.Combine(assetsDir, "StoreLogo.png"), 50);
+                SavePng(Path.Combine(assetsDir, "Square44x44Logo.png"), 44);
+                SavePng(Path.Combine(assetsDir, "Square150x150Logo.png"), 150);
+                Console.WriteLine("Generated MSIX assets in: " + assetsDir);
+            }
+
             return 0;
+        }
+
+        private static void SavePng(string path, int size)
+        {
+            using (Bitmap bmp = RenderIcon(size))
+            {
+                bmp.Save(path, ImageFormat.Png);
+            }
         }
 
         private static Bitmap RenderIcon(int size)
@@ -76,13 +107,10 @@ namespace QuickConvertTools
                     pen.StartCap = LineCap.Round;
                     pen.EndCap = LineCap.Round;
 
-                    // Top arc: from 205 deg sweep 135 deg
                     g.DrawArc(pen, cx - r, cy - r, r * 2f, r * 2f, 205f, 130f);
-                    // Bottom arc: from 25 deg sweep 135 deg
                     g.DrawArc(pen, cx - r, cy - r, r * 2f, r * 2f, 25f, 130f);
                 }
 
-                // Draw arrow heads
                 float arrowLen = Math.Max(2.5f, size * 0.15f);
                 using (SolidBrush whiteBrush = new SolidBrush(Color.White))
                 {
@@ -132,8 +160,8 @@ namespace QuickConvertTools
             using (FileStream fs = new FileStream(path, FileMode.Create, FileAccess.Write))
             using (BinaryWriter bw = new BinaryWriter(fs))
             {
-                bw.Write((ushort)0); // reserved
-                bw.Write((ushort)1); // type = icon
+                bw.Write((ushort)0);
+                bw.Write((ushort)1);
                 bw.Write((ushort)frames.Count);
 
                 int offset = 6 + 16 * frames.Count;
@@ -142,10 +170,10 @@ namespace QuickConvertTools
                     int sz = sizes[i];
                     bw.Write((byte)(sz >= 256 ? 0 : sz));
                     bw.Write((byte)(sz >= 256 ? 0 : sz));
-                    bw.Write((byte)0); // colors
-                    bw.Write((byte)0); // reserved
-                    bw.Write((ushort)1); // planes
-                    bw.Write((ushort)32); // bpp
+                    bw.Write((byte)0);
+                    bw.Write((byte)0);
+                    bw.Write((ushort)1);
+                    bw.Write((ushort)32);
                     bw.Write((uint)frames[i].Length);
                     bw.Write((uint)offset);
                     offset += frames[i].Length;
