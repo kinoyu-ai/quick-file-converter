@@ -1,113 +1,150 @@
 # QuickConvert
 
-Windows 11 の**最初の右クリックメニュー（「その他のオプションを表示」の前）**から、拡張子に応じたファイル変換を**常駐プロセス 0**で実行する軽量ツールです。
+[![Build Native Extension](https://github.com/kinoyu-ai/quick-file-converter/actions/workflows/build-native.yml/badge.svg)](https://github.com/kinoyu-ai/quick-file-converter/actions/workflows/build-native.yml)
+![Platform](https://img.shields.io/badge/platform-Windows%2011-0078D6)
+![Resident](https://img.shields.io/badge/background%20process-0%20(Zero%20Resident)-22c55e)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-2 つの導入方式に対応しています：
+**常駐プロセス 0** で動く、Windows 11 エクスプローラー右クリック専用の軽量ファイル変換ツールです。  
+「その他のオプションを表示」を押さずに、**最初の右クリックメニュー**からファイル形式に応じた変換候補だけを呼び出せます。
 
-| 方式 | 外部メニューアプリ | 待機時リソース | Smart App Control オン環境 | おすすめ |
-| :--- | :---: | :---: | :---: | :--- |
-| **方法A：ネイティブ アプリ拡張機能版（単独動作）** | **不要** | 極小（COM サロゲートのみ・常駐 0） | △（オフ または 署名が必要） | 外部ツールを入れずに Windows 標準の「アプリ拡張機能」だけで使いたい場合 |
-| **方法B：Custom Context Menu 連携版** | Custom Context Menu（Store 版） | 極小（常駐 0） | **○ そのまま動く** | Smart App Control をオンのまま使いたい場合 |
-
----
-
-## 特徴
-
-- **常駐プロセス 0（待機時 CPU 0% / メモリ 0 MB）**  
-  右クリックメニューから選んだ瞬間だけ変換ウィンドウが起動し、完了から約 1 秒後に自動で完全終了します。
-- **Windows 11 モダンコンテキストメニューに直接表示**  
-  「その他のオプションを表示」を押さずに最初の右クリックメニューから呼び出せます。
-- **拡張子ごとの候補自動出し分け**  
-  たとえば `.mp4` なら MP3 / MOV / 圧縮 / GIF 等、`.png` なら JPG / WebP / ICO / PDF 等だけを表示し、対象外のファイル（`.txt`, `.exe` 等）ではメニュー自体を隠します。
-- **複数ファイル一括変換に対応**  
-  複数選択しても 1 プロセスで順番に安全処理します（ネイティブ版では選択全ファイルに共通する候補のみ自動表示）。
-- **上書き事故防止 & キャンセル時クリーンアップ**  
-  同名ファイルが既にある場合は自動で `(1)`, `(2)` を付与し、途中キャンセル時は一時ファイルを自動削除します。
+```text
+movie.mp4 を右クリック                   photo.png を右クリック
+ └─ ファイル変換 ▶                        └─ ファイル変換 ▶
+      ├─ MP3 に変換                            ├─ JPG に変換
+      ├─ MOV に変換                            ├─ WebP に変換
+      ├─ MP4 に圧縮 (軽量化)                    ├─ ICO (アイコン) に変換
+      ├─ GIF に変換                            └─ PDF に変換
+      ├─ WAV に変換
+      └─ M4A (AAC) に変換                ※ .txt や .exe など対象外では非表示
+```
 
 ---
 
-## 対応フォーマット（デフォルト）
+## 特長
 
-| 右クリックしたファイル | 表示される変換候補 |
-| :--- | :--- |
-| `.mp4` | MP3 / MOV / MP4 圧縮 (軽量化) / GIF / WAV / M4A (AAC) |
-| `.mov` | MP3 / MP4 / MP4 圧縮 (軽量化) / GIF / WAV / M4A (AAC) |
-| `.mkv` / `.avi` / `.webm` 等 | MP3 / MOV / MP4 / MP4 圧縮 / GIF / WAV / M4A |
-| `.mp3` / `.wav` / `.flac` / `.m4a` 等 | 他の音声形式（MP3 / WAV / M4A / FLAC） |
-| `.png` | JPG / WebP / ICO (マルチサイズアイコン) / PDF |
-| `.jpg` / `.jpeg` | PNG / WebP / ICO / PDF |
-| `.webp` | PNG / JPG / ICO / PDF |
-
-> 基本の画像変換（PNG / JPG / BMP / ICO / PDF）は FFmpeg なしでも動作します（透過PNG→JPG時の白背景合成・EXIF回転補正対応）。  
-> 動画・音声および WebP / AVIF / HEIC の変換には FFmpeg を使用します。
+- **常駐ゼロ**：クリックした瞬間だけ起動し、変換完了から約 1 秒で自動終了（待機時 CPU 0%・メモリ 0 MB）
+- **拡張子ごとの自動出し分け**：同じ形式への変換や対象外ファイルでは項目を自動で非表示
+- **複数ファイル一括対応**：複数選択しても 1 プロセスで順番に安全処理
+- **上書き事故を防止**：同名ファイルがあれば自動で `(1)`, `(2)` を付与／キャンセル時は一時ファイルを自動削除
+- **基本の画像変換は FFmpeg 不要**：PNG / JPG / BMP / ICO / PDF は Windows 標準機能のみで高速変換（透過背景の白合成・EXIF回転補正対応）
 
 ---
 
-## 方法A：ネイティブ アプリ拡張機能版（Custom Context Menu 不要）
+## 対応フォーマット
 
-ネイティブ C++ の `IExplorerCommand` COM DLL（`QuickConvertShell.dll`）と MSIX パッケージ（`AppxManifest.xml`）により、**Windows 11 の「設定 → 個人用設定 → コンテキストメニュー（アプリ拡張機能）」に単独で直接登録**します。
+| カテゴリ | 入力できる形式 | 変換先（出力） | 必要な外部ツール |
+| :--- | :--- | :--- | :--- |
+| **動画** | `.mp4` `.mov` `.mkv` `.avi` `.webm` `.m4v` `.wmv` `.flv` `.gif` | MP4 / MOV / MP4軽量圧縮 / GIF / 音声抽出 | [FFmpeg](https://ffmpeg.org/) |
+| **音声** | `.mp3` `.wav` `.flac` `.m4a` `.aac` `.ogg` `.opus` `.wma` | MP3 / WAV / M4A (AAC) / FLAC | [FFmpeg](https://ffmpeg.org/) |
+| **画像** | `.png` `.jpg` `.jpeg` `.bmp` `.tif` `.tiff` `.gif` | PNG / JPG / ICO (マルチサイズ) / PDF | **不要** |
+| **画像（拡張）** | `.webp` `.avif` `.heic` / WebP 出力 | PNG / JPG / WebP / ICO / PDF | [FFmpeg](https://ffmpeg.org/) |
 
-### 1. ビルド済みパッケージを入手（または自分でビルド）
-- **GitHub Actions / Releases から入手**：`QuickConvert-Native-win-x64.zip` をダウンロードして任意のフォルダ（例：`C:\Tools\QuickConvert`）に展開
-- **ローカルでビルドする場合**（Visual Studio C++ Build Tools + Windows 10/11 SDK が必要）：
-  ```powershell
-  powershell -ExecutionPolicy Bypass -File .\build-native.ps1
-  ```
+---
 
-### 2. アプリ拡張機能として登録
-Windows 11 の **設定 → システム → 開発者向け → 開発者モード** をオンにした状態で、展開フォルダにて次を実行します：
+## 導入方法（2パターン）
+
+環境に合わせてどちらか選んでください。
+
+| | ネイティブ版（おすすめ・単独動作） | Custom Context Menu 連携版 |
+| :--- | :--- | :--- |
+| **外部メニューアプリ** | **不要**（Windows 標準「アプリ拡張機能」のみ） | [Custom Context Menu](https://github.com/ikas-mc/ContextMenuForWindows11)（Store 版） |
+| **Smart App Control** | オフ（または正規署名）が必要 | **オンのまま動作** |
+
+---
+
+### パターン A：アプリ拡張機能だけで使う（ネイティブ版）
+
+外部アプリを入れず、Windows 11 の **「設定 → 個人用設定 → コンテキストメニュー（アプリ拡張機能）」** に単独で直接登録します。
+
+#### 1. ビルド済み ZIP をダウンロードして展開
+[Actions](https://github.com/kinoyu-ai/quick-file-converter/actions)（または [Releases](https://github.com/kinoyu-ai/quick-file-converter/releases)）から **`QuickConvert-Native-win-x64.zip`** をダウンロードし、任意のフォルダ（例：`C:\Tools\QuickConvert`）に展開します。
+
+#### 2. アプリ拡張機能として登録
+Windows の **設定 → システム → 開発者向け → 開発者モード** をオンにして、展開フォルダで実行します：
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install-native.ps1
 ```
-（※自己署名済み MSIX で入れたい場合は管理者 PowerShell で `.\install-native.ps1 -Mode Msix` を実行）
 
-> **注意**：Windows の **Smart App Control** が「オン（強制）」の場合、未署名／自己署名のネイティブ DLL は OS によりブロックされます。Smart App Control をオンのまま使いたい場合は下の **方法B** をご利用ください。
+#### 3. 最初の右クリックメニューに固定（任意）
+エクスプローラーで右クリック → **メニューのカスタマイズ**（または **設定 → 個人用設定 → コンテキストメニュー**）を開き、**アプリ拡張機能** の `QuickConvert` をメインメニュー表示にすると 1 クリック目で直接表示されます。
 
-### 3. メインメニューにピン留め（任意）
-エクスプローラー右クリック → **メニューのカスタマイズ**（または **設定 → 個人用設定 → コンテキストメニュー**）の **アプリ拡張機能** で `QuickConvert` をメインメニュー表示にすると、1 クリック目の右クリックに「ファイル変換 ▶」が直接表示されます。
-
-### 4. FFmpeg を導入（動画・音声・WebP等の変換用）
+#### 4. FFmpeg を導入（動画・音声・WebP 変換を使う場合）
 ```powershell
 winget install Gyan.FFmpeg
 ```
-※`QuickConvert` は `PATH` に加えて WinGet のインストール先や同階層の `tools\ffmpeg.exe` も自動検出します。
 
-### プリセットのカスタマイズ（ネイティブ版）
-展開フォルダの `presets.json`（または `%LOCALAPPDATA%\QuickConvert\presets.json`）を編集して保存するだけで、**再ビルド不要**で右クリックメニューの候補が即更新されます。
-
-### アンインストール（ネイティブ版）
-```powershell
-powershell -ExecutionPolicy Bypass -File .\uninstall-native.ps1
-```
-（または Windows の「設定 → アプリ → インストールされているアプリ → QuickConvert」からアンインストール）
+> [!NOTE]
+> Windows の **Smart App Control** が「オン（強制）」の場合、未署名 DLL が OS にブロックされます。Smart App Control をオンのまま使いたい場合は下の **パターン B** をご利用ください。
 
 ---
 
-## 方法B：Custom Context Menu 連携版（Smart App Control オンのまま動作）
+### パターン B：Custom Context Menu 連携版（Smart App Control オン環境向け）
 
-1. [Custom Context Menu (`ikas-mc/ContextMenuForWindows11`)](https://github.com/ikas-mc/ContextMenuForWindows11) を Microsoft Store 等から導入し、一度起動して閉じる
-2. このリポジトリを取得して次を実行：
+1. [Custom Context Menu](https://github.com/ikas-mc/ContextMenuForWindows11) を Microsoft Store 等から導入し、一度起動してから閉じる（常駐不要）
+2. このリポジトリをダウンロード（または `git clone`）して以下を実行：
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\install-menus.ps1
    ```
-3. 動画・音声変換用に `winget install Gyan.FFmpeg` を導入
+3. 動画・音声・WebP 変換を使う場合は `winget install Gyan.FFmpeg` を実行
 
-アンインストール：
-```powershell
-powershell -ExecutionPolicy Bypass -File .\uninstall-menus.ps1
-```
+> [!TIP]
+> `QuickConvert` は `PATH` に加えて WinGet のインストール先やアプリフォルダ内の `tools\ffmpeg.exe` も自動検出します。
 
 ---
 
-## プロジェクト構成
+## 候補のカスタマイズ
 
-- `src/QuickConvert.cs` — 常駐ゼロの変換エンジン & ダークUI進捗ウィンドウ（C# / .NET Framework 4.x）
-- `src/IconGen.cs` — マルチ解像度 `.ico` および MSIX 用 PNG アセット生成ツール
-- `shell-ext/QuickConvertShell.cpp` / `.def` — Windows 11 モダンコンテキストメニュー用ネイティブ C++ COM DLL（`IExplorerCommand` + `IEnumExplorerCommand`）
-- `packaging/AppxManifest.xml` — Windows 11 アプリ拡張機能マニフェスト（`windows.fileExplorerContextMenus` + `com:SurrogateServer`）
-- `presets.json` — 拡張子別の変換候補定義
-- `.github/workflows/build-native.yml` — Windows ランナーでの自動ビルド・スモークテスト・Artifact/Release 生成
+[`presets.json`](presets.json) を編集するだけで、表示する候補や対象拡張子を自由に変更できます。
+
+- **ネイティブ版**：展開フォルダの `presets.json`（または `%LOCALAPPDATA%\QuickConvert\presets.json`）を書き換えて保存するだけ（**再ビルド不要・即反映**）
+- **Custom Context Menu 版**：`presets.json` を編集後、`install-menus.ps1` を再実行
+
+---
+
+## アンインストール
+
+- **ネイティブ版**：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\uninstall-native.ps1
+  ```
+  （または Windows の「設定 → アプリ → インストールされているアプリ → QuickConvert」から削除）
+- **Custom Context Menu 版**：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\uninstall-menus.ps1
+  ```
+
+---
+
+<details>
+<summary>開発者向け情報（ローカルビルド・ファイル構成）</summary>
+
+### ローカルでネイティブ版をビルドする
+Visual Studio C++ Build Tools (x64) と Windows 10/11 SDK が入っている環境で実行します：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-native.ps1
+```
+
+自己署名 MSIX でインストールする場合（管理者 PowerShell）：
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-native.ps1 -Mode Msix
+```
+
+### ファイル構成
+| パス | 役割 |
+| :--- | :--- |
+| `src/QuickConvert.cs` | 変換エンジン本体・ダークUI進捗ウィンドウ（C# / .NET Framework 4.x） |
+| `src/IconGen.cs` | マルチ解像度 `.ico`・MSIX 用 PNG アセット生成 |
+| `shell-ext/QuickConvertShell.cpp` | Windows 11 モダンコンテキストメニュー用ネイティブ C++ COM DLL（`IExplorerCommand`） |
+| `packaging/AppxManifest.xml` | Windows 11 アプリ拡張機能マニフェスト（`windows.fileExplorerContextMenus`） |
+| `presets.json` | 拡張子別の変換候補マスター定義 |
+| `QuickConvert.ps1` | Custom Context Menu 版向け署名済み PowerShell ランチャー |
+| `.github/workflows/build-native.yml` | GitHub Actions による自動ビルド・テスト・Artifact/Release 生成 |
+
+</details>
 
 ## License
 
-MIT License
+[MIT License](LICENSE)
