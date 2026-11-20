@@ -10,11 +10,12 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DistDir = Join-Path $Root "dist"
 $ExePath = Join-Path $DistDir "QuickConvert.exe"
 $IconPath = Join-Path $DistDir "QuickConvert.ico"
+$IconsDir = Join-Path $DistDir "icons"
 $LauncherPath = Join-Path $Root "QuickConvert.ps1"
 $PresetsPath = Join-Path $Root "presets.json"
 $OutCmdDir = Join-Path $DistDir "custom_commands"
 
-if ((-not (Test-Path $IconPath)) -or ($UseExe -and -not (Test-Path $ExePath))) {
+if ((-not (Test-Path $IconPath)) -or (-not (Test-Path $IconsDir)) -or ($UseExe -and -not (Test-Path $ExePath))) {
     Write-Host "Build artifacts missing. Running build.ps1 first..." -ForegroundColor Yellow
     & (Join-Path $Root "build.ps1")
 }
@@ -32,17 +33,20 @@ Get-ChildItem -Path $OutCmdDir -Filter "qc_*.json" -ErrorAction SilentlyContinue
 
 $GeneratedFiles = @()
 foreach ($p in $Presets) {
+    $targetIco = Join-Path $IconsDir ("{0}.ico" -f ([string]$p.target).ToLowerInvariant())
+    $resolvedIcon = if (Test-Path $targetIco) { $targetIco } else { $IconPath }
+
     if ($UseExe) {
         $exeField = $ExePath
         $paramSingle = "--to $($p.target) `"{path}`""
         $paramMulti = "--to $($p.target) {path}"
-        $iconField = "$ExePath,0"
+        $iconField = if (Test-Path $targetIco) { $targetIco } else { "$ExePath,0" }
         $showFlag = 0
     } else {
         $exeField = "powershell.exe"
         $paramSingle = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LauncherPath`" --to $($p.target) `"{path}`""
         $paramMulti = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$LauncherPath`" --to $($p.target) {path}"
-        $iconField = $IconPath
+        $iconField = $resolvedIcon
         $showFlag = -1
     }
 

@@ -19,13 +19,14 @@ if (-not (Test-Path $Csc)) {
     throw "csc.exe not found at $Csc"
 }
 
-Write-Host "[1/2] Generating QuickConvert.ico..." -ForegroundColor Cyan
+Write-Host "[1/2] Generating QuickConvert.ico and format-specific monotone icons..." -ForegroundColor Cyan
 $IconPath = Join-Path $DistDir "QuickConvert.ico"
+$IconsDir = Join-Path $DistDir "icons"
 $IconGenSrc = Join-Path $SrcDir "IconGen.cs"
 if (-not ([System.Management.Automation.PSTypeName]'QuickConvertTools.IconGen').Type) {
     Add-Type -Path $IconGenSrc -ReferencedAssemblies System.Drawing
 }
-$rc = [QuickConvertTools.IconGen]::Main([string[]]@($IconPath))
+$rc = [QuickConvertTools.IconGen]::Main([string[]]@($IconPath, "--target-icons", $IconsDir))
 if ($rc -ne 0) { throw "Icon generation failed." }
 
 Write-Host "[2/2] Building QuickConvert.exe (zero-resident WinExe)..." -ForegroundColor Cyan

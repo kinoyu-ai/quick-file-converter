@@ -1213,9 +1213,19 @@ namespace QuickConvert
 
             try
             {
-                if (!string.IsNullOrEmpty(_customIcon) && File.Exists(_customIcon))
+                string resolvedIcon = _customIcon;
+                if (string.IsNullOrEmpty(resolvedIcon) || !File.Exists(resolvedIcon))
                 {
-                    Icon = new Icon(_customIcon);
+                    string targetIco = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icons", _spec.TargetKey + ".ico");
+                    if (File.Exists(targetIco))
+                    {
+                        resolvedIcon = targetIco;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(resolvedIcon) && File.Exists(resolvedIcon))
+                {
+                    Icon = new Icon(resolvedIcon);
                 }
                 else
                 {

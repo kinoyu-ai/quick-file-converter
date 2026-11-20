@@ -79,6 +79,17 @@ namespace
         return L"";
     }
 
+    std::wstring ResolveTargetIconPath(const std::wstring& target)
+    {
+        std::wstring dir = GetModuleDirectory();
+        if (!dir.empty() && !target.empty())
+        {
+            std::wstring targetIco = dir + L"\\icons\\" + ToLowerW(target) + L".ico";
+            if (FileExistsW(targetIco)) return targetIco;
+        }
+        return ResolveIconPath();
+    }
+
     std::vector<std::wstring> SplitExts(const std::wstring& raw)
     {
         std::vector<std::wstring> exts;
@@ -625,7 +636,7 @@ namespace
         IFACEMETHODIMP GetIcon(IShellItemArray*, LPWSTR* ppszIcon) override
         {
             if (!ppszIcon) return E_POINTER;
-            std::wstring icon = ResolveIconPath();
+            std::wstring icon = ResolveTargetIconPath(_preset.target);
             if (icon.empty())
             {
                 *ppszIcon = nullptr;
@@ -671,7 +682,7 @@ namespace
 
             std::wstring dir = GetModuleDirectory();
             std::wstring exePath = dir + L"\\QuickConvert.exe";
-            std::wstring icoPath = dir + L"\\QuickConvert.ico";
+            std::wstring icoPath = ResolveTargetIconPath(_preset.target);
 
             if (!FileExistsW(exePath))
             {
@@ -679,7 +690,7 @@ namespace
             }
 
             std::wstring cmdLine = L"\"" + exePath + L"\" --to " + _preset.target;
-            if (FileExistsW(icoPath))
+            if (!icoPath.empty() && FileExistsW(icoPath))
             {
                 cmdLine += L" --icon \"" + icoPath + L"\"";
             }

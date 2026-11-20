@@ -24,13 +24,14 @@ if (-not (Test-Path $Csc)) {
     throw "csc.exe not found at $Csc"
 }
 
-Write-Host "[1/4] Generating icon and MSIX visual assets..." -ForegroundColor Cyan
+Write-Host "[1/4] Generating icons (root + format-specific monotone) and MSIX visual assets..." -ForegroundColor Cyan
 $IconPath = Join-Path $NativeDir "QuickConvert.ico"
+$IconsDir = Join-Path $NativeDir "icons"
 $IconGenSrc = Join-Path $SrcDir "IconGen.cs"
 if (-not ([System.Management.Automation.PSTypeName]'QuickConvertTools.IconGen').Type) {
     Add-Type -Path $IconGenSrc -ReferencedAssemblies System.Drawing
 }
-$rc = [QuickConvertTools.IconGen]::Main([string[]]@($IconPath, "--assets", $AssetsDir))
+$rc = [QuickConvertTools.IconGen]::Main([string[]]@($IconPath, "--assets", $AssetsDir, "--target-icons", $IconsDir))
 if ($rc -ne 0) { throw "Icon/Asset generation failed." }
 
 Write-Host "[2/4] Building QuickConvert.exe..." -ForegroundColor Cyan
