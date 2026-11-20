@@ -45,10 +45,18 @@ jobs:
             $verText = (Get-Content ".\VERSION" -Raw).Trim()
             if ($verText -match '^v?\d+\.\d+\.\d+$') {
               $tag = if ($verText.StartsWith("v")) { $verText } else { "v$verText" }
-              $ErrorActionPreference = "Continue"
-              gh release view $tag *> $null
-              $releaseExists = ($LASTEXITCODE -eq 0)
-              $ErrorActionPreference = "Stop"
+              $releaseExists = $false
+              try {
+                $headers = @{
+                  "Authorization" = "Bearer $env:GH_TOKEN"
+                  "Accept"        = "application/vnd.github+json"
+                  "User-Agent"    = "QuickConvert-CI"
+                }
+                Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag" -Headers $headers -ErrorAction Stop | Out-Null
+                $releaseExists = $true
+              } catch {
+                $releaseExists = $false
+              }
               if (-not $releaseExists) {
                 $publish = "true"
               }
@@ -59,6 +67,7 @@ jobs:
           "publish=$publish" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "allow_update=$allowUpdate" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Version tag: $tag (publish release: $publish, allow update: $allowUpdate)"
+          exit 0
 
       - name: Build QuickConvert.exe, QuickConvertShell.dll, icons, and QuickConvert.msix
         shell: powershell
@@ -135,19 +144,30 @@ jobs:
             "dist/QuickConvert.msix",
             "dist/SHA256SUMS.txt"
           )
-          $ErrorActionPreference = "Continue"
-          gh release view $tag *> $null
-          $exists = ($LASTEXITCODE -eq 0)
-          $ErrorActionPreference = "Stop"
+          $exists = $false
+          try {
+            $headers = @{
+              "Authorization" = "Bearer $env:GH_TOKEN"
+              "Accept"        = "application/vnd.github+json"
+              "User-Agent"    = "QuickConvert-CI"
+            }
+            Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag" -Headers $headers -ErrorAction Stop | Out-Null
+            $exists = $true
+          } catch {
+            $exists = $false
+          }
 
           if ($exists) {
             if ("${{ steps.ver.outputs.allow_update }}" -eq "true") {
               Write-Host "Release $tag already exists. Updating assets..."
               gh release upload $tag $assets --clobber
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             } else {
               Write-Host "Release $tag already exists. Skipping."
             }
           } else {
             Write-Host "Creating new release $tag at commit ${{ github.sha }}..."
             gh release create $tag $assets --target "${{ github.sha }}" --title "QuickConvert $tag" --generate-notes --latest
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
+          exit 0
