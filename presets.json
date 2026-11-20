@@ -1,0 +1,93 @@
+[
+  {
+    "id": "qc_01_mp3",
+    "index": 10,
+    "title": "MP3 に変換",
+    "target": "mp3",
+    "acceptExts": ".mp4|.mov|.mkv|.avi|.webm|.m4v|.wmv|.flv|.wav|.flac|.m4a|.aac|.ogg|.opus|.wma"
+  },
+  {
+    "id": "qc_02_mov",
+    "index": 20,
+    "title": "MOV に変換",
+    "target": "mov",
+    "acceptExts": ".mp4|.mkv|.avi|.webm|.m4v|.wmv|.flv"
+  },
+  {
+    "id": "qc_03_mp4",
+    "index": 30,
+    "title": "MP4 に変換",
+    "target": "mp4",
+    "acceptExts": ".mov|.mkv|.avi|.webm|.m4v|.wmv|.flv|.gif"
+  },
+  {
+    "id": "qc_04_mp4_lite",
+    "index": 40,
+    "title": "MP4 に圧縮 (軽量化)",
+    "target": "mp4-lite",
+    "acceptExts": ".mp4|.mov|.mkv|.avi|.webm|.m4v|.wmv"
+  },
+  {
+    "id": "qc_05_gif",
+    "index": 50,
+    "title": "GIF に変換",
+    "target": "gif",
+    "acceptExts": ".mp4|.mov|.mkv|.avi|.webm|.m4v"
+  },
+  {
+    "id": "qc_06_wav",
+    "index": 60,
+    "title": "WAV に変換",
+    "target": "wav",
+    "acceptExts": ".mp4|.mov|.mkv|.avi|.webm|.mp3|.flac|.m4a|.aac|.ogg|.opus|.wma"
+  },
+  {
+    "id": "qc_07_m4a",
+    "index": 70,
+    "title": "M4A (AAC) に変換",
+    "target": "m4a",
+    "acceptExts": ".mp4|.mov|.mkv|.mp3|.wav|.flac|.ogg|.opus|.wma"
+  },
+  {
+    "id": "qc_08_flac",
+    "index": 80,
+    "title": "FLAC に変換",
+    "target": "flac",
+    "acceptExts": ".wav|.mp3|.m4a|.aac|.ogg|.opus|.wma"
+  },
+  {
+    "id": "qc_09_png",
+    "index": 90,
+    "title": "PNG に変換",
+    "target": "png",
+    "acceptExts": ".jpg|.jpeg|.webp|.bmp|.tif|.tiff|.gif|.avif|.heic"
+  },
+  {
+    "id": "qc_10_jpg",
+    "index": 100,
+    "title": "JPG に変換",
+    "target": "jpg",
+    "acceptExts": ".png|.webp|.bmp|.tif|.tiff|.gif|.avif|.heic"
+  },
+  {
+    "id": "qc_11_webp",
+    "index": 110,
+    "title": "WebP に変換",
+    "target": "webp",
+    "acceptExts": ".png|.jpg|.jpeg|.bmp|.tif|.tiff|.gif"
+  },
+  {
+    "id": "qc_12_ico",
+    "index": 120,
+    "title": "ICO (アイコン) に変換",
+    "target": "ico",
+    "acceptExts": ".png|.jpg|.jpeg|.webp|.bmp"
+  },
+  {
+    "id": "qc_13_pdf",
+    "index": 130,
+    "title": "PDF に変換",
+    "target": "pdf",
+    "acceptExts": ".png|.jpg|.jpeg|.webp|.bmp|.tif|.tiff"
+  }
+]

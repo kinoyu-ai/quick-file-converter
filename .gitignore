@@ -1,0 +1,17 @@
+# Build artifacts and machine-specific generated JSONs
+dist/
+obj/
+bin/
+
+# Local tools
+tools/
+*.exe
+*.dll
+*.pdb
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
