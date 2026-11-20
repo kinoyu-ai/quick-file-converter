@@ -5,6 +5,12 @@ on:
     branches: [ main ]
     tags: [ 'v*' ]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Optional tag to publish a GitHub Release automatically (e.g. v1.0.0). Leave empty for build-only.'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -16,16 +22,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build QuickConvert.exe, QuickConvertShell.dll, and QuickConvert.msix
-        shell: pwsh
+      - name: Determine release version
+        id: ver
+        shell: powershell
         run: |
-          powershell -ExecutionPolicy Bypass -File .\build-native.ps1 -Clean
+          $tag = ""
+          $publish = "false"
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and -not [string]::IsNullOrWhiteSpace("${{ inputs.release_tag }}")) {
+            $tag = "${{ inputs.release_tag }}".Trim()
+            if ($tag -notmatch '^v') { $tag = "v$tag" }
+            $publish = "true"
+          } elseif ("${{ github.ref }}".StartsWith("refs/tags/v")) {
+            $tag = "${{ github.ref_name }}"
+            $publish = "true"
+          } else {
+            $tag = "v1.0.0"
+          }
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "publish=$publish" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version tag: $tag (publish release: $publish)"
+
+      - name: Build QuickConvert.exe, QuickConvertShell.dll, icons, and QuickConvert.msix
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\build-native.ps1 -Clean -Version "${{ steps.ver.outputs.tag }}"
 
       - name: Smoke test QuickConvert.exe (PNG -> JPG / ICO / PDF)
-        shell: pwsh
+        shell: powershell
         run: |
           $testDir = Join-Path $env:TEMP "qc_ci_test"
+          if (Test-Path $testDir) { Remove-Item $testDir -Recurse -Force }
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+
           Add-Type -AssemblyName System.Drawing
           $png = Join-Path $testDir "ci_sample.png"
           $bmp = New-Object System.Drawing.Bitmap(128, 128)
@@ -34,15 +62,15 @@ jobs:
           $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
           $g.Dispose(); $bmp.Dispose()
 
-          $exe = Resolve-Path ".\dist\native\QuickConvert.exe"
+          $exe = (Resolve-Path ".\dist\native\QuickConvert.exe").Path
           foreach ($fmt in @("jpg", "ico", "pdf")) {
             $p = Start-Process -FilePath $exe -ArgumentList "--to $fmt --headless `"$png`"" -Wait -PassThru -NoNewWindow
             if ($p.ExitCode -ne 0) { throw "Smoke test failed for $fmt (exit=$($p.ExitCode))" }
           }
           Get-ChildItem $testDir | Format-Table Name, Length -AutoSize
 
-      - name: Package QuickConvert-Native-win-x64.zip
-        shell: pwsh
+      - name: Package QuickConvert-Native-win-x64.zip and SHA256SUMS.txt
+        shell: powershell
         run: |
           $stageRoot = Join-Path $env:TEMP "qc_native_pkg"
           $stage = Join-Path $stageRoot "QuickConvert-Native"
@@ -57,8 +85,16 @@ jobs:
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
           Compress-Archive -Path $stage -DestinationPath $zipPath -CompressionLevel Optimal
 
-          Get-FileHash $zipPath, ".\dist\QuickConvert.msix" -Algorithm SHA256 |
-            Format-Table Algorithm, Hash, Path -AutoSize
+          $msixPath = ".\dist\QuickConvert.msix"
+          $hZip = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+          $hMsix = (Get-FileHash $msixPath -Algorithm SHA256).Hash
+          $sums = @(
+            "$hZip  QuickConvert-Native-win-x64.zip",
+            "$hMsix  QuickConvert.msix"
+          ) -join "`n"
+          $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText((Join-Path (Resolve-Path ".\dist").Path "SHA256SUMS.txt"), ($sums + "`n"), $Utf8NoBom)
+          Write-Host $sums
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -67,16 +103,29 @@ jobs:
           path: |
             dist/QuickConvert-Native-win-x64.zip
             dist/QuickConvert.msix
+            dist/SHA256SUMS.txt
 
-      - name: Create GitHub Release on Tag
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
+      - name: Publish GitHub Release
+        if: steps.ver.outputs.publish == 'true'
+        shell: powershell
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = "${{ github.ref_name }}"
-          gh release create $tag `
-            "dist/QuickConvert-Native-win-x64.zip" `
-            "dist/QuickConvert.msix" `
-            --title "QuickConvert $tag" `
-            --generate-notes
+          $tag = "${{ steps.ver.outputs.tag }}"
+          $assets = @(
+            "dist/QuickConvert-Native-win-x64.zip",
+            "dist/QuickConvert.msix",
+            "dist/SHA256SUMS.txt"
+          )
+          $ErrorActionPreference = "Continue"
+          gh release view $tag *> $null
+          $exists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = "Stop"
+
+          if ($exists) {
+            Write-Host "Release $tag already exists. Updating assets..."
+            gh release upload $tag $assets --clobber
+          } else {
+            Write-Host "Creating new release $tag..."
+            gh release create $tag $assets --title "QuickConvert $tag" --generate-notes --latest
+          }

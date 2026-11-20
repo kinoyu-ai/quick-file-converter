@@ -1,6 +1,7 @@
 param(
     [switch]$Clean,
-    [switch]$SkipMsix
+    [switch]$SkipMsix,
+    [string]$Version = "1.0.0"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,6 +14,17 @@ $SrcDir = Join-Path $Root "src"
 $ShellDir = Join-Path $Root "shell-ext"
 $PkgDir = Join-Path $Root "packaging"
 
+# Normalize version strings (tag e.g. "v1.2.3" -> MSIX 4-part "1.2.3.0")
+$cleanVer = $Version.Trim().TrimStart('v', 'V')
+if ($cleanVer -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+    $cleanVer = "1.0.0"
+}
+$msixVersion = if ($cleanVer -match '^\d+\.\d+\.\d+$') { "$cleanVer.0" } else { $cleanVer }
+$displayTag = "v" + ($cleanVer -replace '\.0$', '')
+if ($Version.Trim() -match '^v\d+\.\d+\.\d+') {
+    $displayTag = $Version.Trim()
+}
+
 if ($Clean -and (Test-Path $NativeDir)) {
     Remove-Item $NativeDir -Recurse -Force
 }
@@ -23,6 +35,8 @@ $Csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if (-not (Test-Path $Csc)) {
     throw "csc.exe not found at $Csc"
 }
+
+Write-Host ("Building QuickConvert {0} (MSIX {1})..." -f $displayTag, $msixVersion) -ForegroundColor Cyan
 
 Write-Host "[1/4] Generating icons (root + format-specific monotone) and MSIX visual assets..." -ForegroundColor Cyan
 $IconPath = Join-Path $NativeDir "QuickConvert.ico"
@@ -84,21 +98,26 @@ $batContent = @"
 @echo off
 call "$vcVars"
 if errorlevel 1 exit /b %errorlevel%
-cl /nologo /O2 /W4 /MT /std:c++17 /EHsc /utf-8 /LD /DUNICODE /D_UNICODE /Fo"$ObjTmpDir\\" "$CppSrc" /Fe:"$DllPath" /link /DEF:"$DefFile" /IMPLIB:"$ObjTmpDir\QuickConvertShell.lib" shlwapi.lib shell32.lib ole32.lib uuid.lib user32.lib
+cl /nologo /O2 /W4 /MT /std:c++17 /EHsc /utf-8 /LD /DUNICODE /D_UNICODE /Fo"$ObjTmpDir\QuickConvertShell.obj" "$CppSrc" /Fe:"$DllPath" /link /DEF:"$DefFile" /IMPLIB:"$ObjTmpDir\QuickConvertShell.lib" shlwapi.lib shell32.lib ole32.lib uuid.lib user32.lib
 exit /b %errorlevel%
 "@
 [System.IO.File]::WriteAllText($tmpBat, $batContent, [System.Text.Encoding]::ASCII)
 & cmd.exe /c $tmpBat
 if ($LASTEXITCODE -ne 0) { throw "QuickConvertShell.dll compilation failed." }
 
-# Stage manifest, presets, and helper scripts
-Copy-Item (Join-Path $PkgDir "AppxManifest.xml") (Join-Path $NativeDir "AppxManifest.xml") -Force
+# Stage manifest (with stamped version), presets, version.txt, and helper scripts
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$manifestRaw = [System.IO.File]::ReadAllText((Join-Path $PkgDir "AppxManifest.xml"), [System.Text.Encoding]::UTF8)
+$manifestStamped = [Regex]::Replace($manifestRaw, '(<Identity\b[^>]*?\bVersion=")[0-9\.]+(")', ('${1}' + $msixVersion + '${2}'))
+[System.IO.File]::WriteAllText((Join-Path $NativeDir "AppxManifest.xml"), $manifestStamped, $Utf8NoBom)
+[System.IO.File]::WriteAllText((Join-Path $NativeDir "version.txt"), $displayTag, $Utf8NoBom)
+
 Copy-Item (Join-Path $Root "presets.json") (Join-Path $NativeDir "presets.json") -Force
-if (Test-Path (Join-Path $Root "install-native.ps1")) {
-    Copy-Item (Join-Path $Root "install-native.ps1") (Join-Path $NativeDir "install-native.ps1") -Force
-}
-if (Test-Path (Join-Path $Root "uninstall-native.ps1")) {
-    Copy-Item (Join-Path $Root "uninstall-native.ps1") (Join-Path $NativeDir "uninstall-native.ps1") -Force
+foreach ($helper in @("install-native.ps1", "uninstall-native.ps1", "update.ps1", "update.bat")) {
+    $srcHelper = Join-Path $Root $helper
+    if (Test-Path $srcHelper) {
+        Copy-Item $srcHelper (Join-Path $NativeDir $helper) -Force
+    }
 }
 
 Remove-Item $ObjTmpDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -117,11 +136,13 @@ if (-not $SkipMsix) {
         throw "makeappx.exe not found in Windows 10/11 SDK."
     }
 
-    # Pack only MSIX payload (exclude helper .ps1 installers from inside the MSIX container)
+    # Pack only MSIX payload (exclude installer/updater scripts from inside MSIX container)
     $msixStage = Join-Path $DistDir "msix_stage"
     if (Test-Path $msixStage) { Remove-Item $msixStage -Recurse -Force }
     Copy-Item $NativeDir $msixStage -Recurse -Force
-    Get-ChildItem $msixStage -Filter "*.ps1" -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem $msixStage -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.Extension -eq ".ps1" -or $_.Extension -eq ".bat" } |
+        Remove-Item -Force
 
     $MsixPath = Join-Path $DistDir "QuickConvert.msix"
     if (Test-Path $MsixPath) { Remove-Item $MsixPath -Force }

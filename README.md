@@ -104,6 +104,25 @@ winget install Gyan.FFmpeg
 
 ---
 
+## アップデート方法（常駐なし・ワンコマンド）
+
+バックグラウンド常駐は一切行わず、更新したいときだけ次のいずれかを実行します。**編集済みの `presets.json` は自動で保護されます。**
+
+- **フォルダ内の `update.bat` をダブルクリック**
+- **または PowerShell から 1 行で最新リリースを導入／更新**：
+  ```powershell
+  irm https://raw.githubusercontent.com/kinoyu-ai/quick-file-converter/main/update.ps1 | iex
+  ```
+- **更新があるか確認だけする場合**：
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\update.ps1 -CheckOnly
+  ```
+
+> [!TIP]
+> **新しい Release を発行するとき（開発者向け）**：GitHub の [Actions → Build Native Windows 11 App Extension](https://github.com/kinoyu-ai/quick-file-converter/actions/workflows/build-native.yml) で **「Run workflow」** を押し、`release_tag`（例：`v1.0.0`）を入力して実行するだけで、ビルド・SHA-256 生成・Release 公開まで全自動で完了します。
+
+---
+
 ## アンインストール
 
 - **ネイティブ版**：
