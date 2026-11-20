@@ -1,0 +1,82 @@
+name: Build Native Windows 11 App Extension
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-native:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build QuickConvert.exe, QuickConvertShell.dll, and QuickConvert.msix
+        shell: pwsh
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\build-native.ps1 -Clean
+
+      - name: Smoke test QuickConvert.exe (PNG -> JPG / ICO / PDF)
+        shell: pwsh
+        run: |
+          $testDir = Join-Path $env:TEMP "qc_ci_test"
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+          Add-Type -AssemblyName System.Drawing
+          $png = Join-Path $testDir "ci_sample.png"
+          $bmp = New-Object System.Drawing.Bitmap(128, 128)
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $g.Clear([System.Drawing.Color]::DodgerBlue)
+          $bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
+          $g.Dispose(); $bmp.Dispose()
+
+          $exe = Resolve-Path ".\dist\native\QuickConvert.exe"
+          foreach ($fmt in @("jpg", "ico", "pdf")) {
+            $p = Start-Process -FilePath $exe -ArgumentList "--to $fmt --headless `"$png`"" -Wait -PassThru -NoNewWindow
+            if ($p.ExitCode -ne 0) { throw "Smoke test failed for $fmt (exit=$($p.ExitCode))" }
+          }
+          Get-ChildItem $testDir | Format-Table Name, Length -AutoSize
+
+      - name: Package QuickConvert-Native-win-x64.zip
+        shell: pwsh
+        run: |
+          $stageRoot = Join-Path $env:TEMP "qc_native_pkg"
+          $stage = Join-Path $stageRoot "QuickConvert-Native"
+          if (Test-Path $stageRoot) { Remove-Item $stageRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          Copy-Item ".\dist\native\*" $stage -Recurse -Force
+          Copy-Item ".\README.md" $stage -Force
+          Copy-Item ".\LICENSE" $stage -Force
+
+          $zipPath = ".\dist\QuickConvert-Native-win-x64.zip"
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          Compress-Archive -Path $stage -DestinationPath $zipPath -CompressionLevel Optimal
+
+          Get-FileHash $zipPath, ".\dist\QuickConvert.msix" -Algorithm SHA256 |
+            Format-Table Algorithm, Hash, Path -AutoSize
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickConvert-Native-win-x64
+          path: |
+            dist/QuickConvert-Native-win-x64.zip
+            dist/QuickConvert.msix
+
+      - name: Create GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release create $tag `
+            "dist/QuickConvert-Native-win-x64.zip" `
+            "dist/QuickConvert.msix" `
+            --title "QuickConvert $tag" `
+            --generate-notes
