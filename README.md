@@ -119,7 +119,7 @@ winget install Gyan.FFmpeg
   ```
 
 > [!TIP]
-> **新しい Release を発行するとき（開発者向け）**：GitHub の [Actions → Build Native Windows 11 App Extension](https://github.com/kinoyu-ai/quick-file-converter/actions/workflows/build-native.yml) で **「Run workflow」** を押し、`release_tag`（例：`v1.0.0`）を入力して実行するだけで、ビルド・SHA-256 生成・Release 公開まで全自動で完了します。
+> **新しい Release を発行するとき（開発者向け）**：[`VERSION`](VERSION) ファイル（例：`v1.0.1`）を書き換えて `main` にプッシュするだけ（または Actions の「Run workflow」で `release_tag` 指定）で、ビルド・SHA-256 生成・GitHub Release 公開まで全自動で完了します。
 
 ---
 

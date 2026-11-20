@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional tag to publish a GitHub Release automatically (e.g. v1.0.0). Leave empty for build-only.'
+        description: 'Optional tag to publish/update a GitHub Release (e.g. v1.0.0). Leave empty to follow VERSION file.'
         required: false
         default: ''
         type: string
@@ -25,22 +25,40 @@ jobs:
       - name: Determine release version
         id: ver
         shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag = ""
+          $tag = "v1.0.0"
           $publish = "false"
+          $allowUpdate = "false"
+
           if ("${{ github.event_name }}" -eq "workflow_dispatch" -and -not [string]::IsNullOrWhiteSpace("${{ inputs.release_tag }}")) {
             $tag = "${{ inputs.release_tag }}".Trim()
             if ($tag -notmatch '^v') { $tag = "v$tag" }
             $publish = "true"
+            $allowUpdate = "true"
           } elseif ("${{ github.ref }}".StartsWith("refs/tags/v")) {
             $tag = "${{ github.ref_name }}"
             $publish = "true"
-          } else {
-            $tag = "v1.0.0"
+            $allowUpdate = "true"
+          } elseif (Test-Path ".\VERSION") {
+            $verText = (Get-Content ".\VERSION" -Raw).Trim()
+            if ($verText -match '^v?\d+\.\d+\.\d+$') {
+              $tag = if ($verText.StartsWith("v")) { $verText } else { "v$verText" }
+              $ErrorActionPreference = "Continue"
+              gh release view $tag *> $null
+              $releaseExists = ($LASTEXITCODE -eq 0)
+              $ErrorActionPreference = "Stop"
+              if (-not $releaseExists) {
+                $publish = "true"
+              }
+            }
           }
+
           "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "publish=$publish" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Version tag: $tag (publish release: $publish)"
+          "allow_update=$allowUpdate" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Version tag: $tag (publish release: $publish, allow update: $allowUpdate)"
 
       - name: Build QuickConvert.exe, QuickConvertShell.dll, icons, and QuickConvert.msix
         shell: powershell
@@ -123,9 +141,13 @@ jobs:
           $ErrorActionPreference = "Stop"
 
           if ($exists) {
-            Write-Host "Release $tag already exists. Updating assets..."
-            gh release upload $tag $assets --clobber
+            if ("${{ steps.ver.outputs.allow_update }}" -eq "true") {
+              Write-Host "Release $tag already exists. Updating assets..."
+              gh release upload $tag $assets --clobber
+            } else {
+              Write-Host "Release $tag already exists. Skipping."
+            }
           } else {
-            Write-Host "Creating new release $tag..."
-            gh release create $tag $assets --title "QuickConvert $tag" --generate-notes --latest
+            Write-Host "Creating new release $tag at commit ${{ github.sha }}..."
+            gh release create $tag $assets --target "${{ github.sha }}" --title "QuickConvert $tag" --generate-notes --latest
           }
