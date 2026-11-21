@@ -660,6 +660,11 @@ namespace
         IFACEMETHODIMP GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState) override
         {
             if (!pCmdState) return E_POINTER;
+            if (!psiItemArray)
+            {
+                *pCmdState = ECS_ENABLED;
+                return S_OK;
+            }
             std::vector<std::wstring> paths;
             std::vector<std::wstring> exts;
             if (!ExtractSelectedFiles(psiItemArray, paths, exts))
@@ -913,6 +918,11 @@ namespace
         IFACEMETHODIMP GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState) override
         {
             if (!pCmdState) return E_POINTER;
+            if (!psiItemArray)
+            {
+                *pCmdState = ECS_ENABLED;
+                return S_OK;
+            }
             std::vector<std::wstring> paths;
             std::vector<std::wstring> exts;
             if (!ExtractSelectedFiles(psiItemArray, paths, exts))

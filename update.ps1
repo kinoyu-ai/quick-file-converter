@@ -37,6 +37,53 @@ function Test-SmartAppControlOn {
     }
 }
 
+function Test-DeveloperModeOn {
+    try {
+        $p = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction Stop
+        return ($p.AllowDevelopmentWithoutDevLicense -eq 1)
+    } catch {
+        return $false
+    }
+}
+
+function Show-DeveloperModeWarning {
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Red
+    Write-Host (J "[\u8B66\u544A] \u958B\u767A\u8005\u30E2\u30FC\u30C9 (Developer Mode) \u304C\u30AA\u30D5\u3067\u3059") -ForegroundColor Red
+    Write-Host "========================================================================" -ForegroundColor Red
+    Write-Host ""
+    Write-Host (J "\u30CD\u30A4\u30C6\u30A3\u30D6\u7248\u3092 Windows \u306B\u767B\u9332\u3059\u308B\u306B\u306F\u300C\u958B\u767A\u8005\u30E2\u30FC\u30C9\u300D\u3092\u30AA\u30F3\u306B\u3059\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002") -ForegroundColor Yellow
+    Write-Host (J "  \u8A2D\u5B9A > \u30B7\u30B9\u30C6\u30E0 > \u958B\u767A\u8005\u5411\u3051 > \u958B\u767A\u8005\u30E2\u30FC\u30C9 \u3092\u30AA\u30F3\u306B\u3057\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002") -ForegroundColor Cyan
+}
+
+function Register-NativePackage([string]$TargetDir) {
+    $manifestPath = Join-Path $TargetDir "AppxManifest.xml"
+    if (-not (Test-Path $manifestPath)) {
+        throw "AppxManifest.xml not found in $TargetDir"
+    }
+
+    if (-not (Test-DeveloperModeOn)) {
+        Show-DeveloperModeWarning
+        throw "Developer Mode is OFF. Enable Settings > System > For developers > Developer Mode and re-run."
+    }
+
+    $existingPkg = Get-AppxPackage -Name "QuickConvert.ShellExtension" -ErrorAction SilentlyContinue
+    if ($existingPkg) {
+        Write-Host "Removing previous QuickConvert.ShellExtension registration..." -ForegroundColor Yellow
+        $existingPkg | Remove-AppxPackage
+    }
+
+    Write-Host "Registering Windows 11 App Extension..." -ForegroundColor Cyan
+    Add-AppxPackage -Register $manifestPath
+
+    $verified = Get-AppxPackage -Name "QuickConvert.ShellExtension" -ErrorAction SilentlyContinue
+    if (-not $verified) {
+        throw "Package registration did not complete (QuickConvert.ShellExtension not found after Add-AppxPackage)."
+    }
+
+    Write-Host ("Registered: {0} (Status: {1})" -f $verified.PackageFullName, $verified.Status) -ForegroundColor Green
+}
+
 function Show-SmartAppControlWarning {
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Red
@@ -93,6 +140,12 @@ if (($Mode -eq "Native") -and (-not $IgnoreSac) -and (-not $CheckOnly) -and (Tes
     exit 2
 }
 
+if (($Mode -eq "Native") -and (-not $CheckOnly) -and (-not (Test-DeveloperModeOn))) {
+    Show-DeveloperModeWarning
+    Pause-IfInteractive
+    exit 3
+}
+
 $headers = @{
     "User-Agent" = "QuickConvert-Updater"
     "Accept"     = "application/vnd.github+json"
@@ -123,6 +176,26 @@ $LatestTag = [string]$release.tag_name
 Write-Host ("Latest release    : {0}" -f $LatestTag) -ForegroundColor Green
 
 if ((-not $Force) -and ($CurrentVersion -eq $LatestTag)) {
+    if (($Mode -eq "Native") -and (-not $CheckOnly)) {
+        $regPkg = Get-AppxPackage -Name "QuickConvert.ShellExtension" -ErrorAction SilentlyContinue
+        $expectedLoc = $InstallDir.TrimEnd('\', '/')
+        $actualLoc = if ($regPkg -and $regPkg.InstallLocation) { $regPkg.InstallLocation.TrimEnd('\', '/') } else { "" }
+        if ((-not $regPkg) -or ($actualLoc -ine $expectedLoc)) {
+            Write-Host "Files are up to date, but Windows App Extension is not registered yet. Registering now..." -ForegroundColor Yellow
+            try {
+                Register-NativePackage $InstallDir
+                Write-Host ""
+                Write-Host (J "\u767B\u9332\u304C\u5B8C\u4E86\u3057\u307E\u3057\u305F\uFF01") -ForegroundColor Green
+                Write-Host (J "\u53F3\u30AF\u30EA\u30C3\u30AF\u30E1\u30CB\u30E5\u30FC\u306B\u8868\u793A\u3055\u308C\u306A\u3044\u5834\u5408\u306F\u3001\u30A8\u30AF\u30B9\u30D7\u30ED\u30FC\u30E9\u30FC\u3092\u518D\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002") -ForegroundColor Gray
+                Pause-IfInteractive
+                exit 0
+            } catch {
+                Write-Host ("[Error] Registration failed: {0}" -f $_.Exception.Message) -ForegroundColor Red
+                Pause-IfInteractive
+                exit 1
+            }
+        }
+    }
     Write-Host "QuickConvert is already up to date!" -ForegroundColor Green
     Pause-IfInteractive
     exit 0
@@ -254,31 +327,31 @@ try {
         [System.IO.File]::WriteAllBytes($userPresetsPath, $savedPresets)
     }
 
-    # Record installed version
-    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($VersionFile, $LatestTag, $Utf8NoBom)
-
-    # Re-register updated extension or menus
+    # Re-register updated extension or menus BEFORE stamping version.txt
     if ($Mode -eq "Native") {
-        $installScript = Join-Path $InstallDir "install-native.ps1"
-        if (Test-Path $installScript) {
-            if ($IgnoreSac) {
-                & $installScript -IgnoreSac -NoPause
-            } else {
-                & $installScript -NoPause
-            }
-        } else {
-            Add-AppxPackage -Register (Join-Path $InstallDir "AppxManifest.xml")
-        }
+        Register-NativePackage $InstallDir
     } else {
         $buildScript = Join-Path $InstallDir "build.ps1"
         $menuScript = Join-Path $InstallDir "install-menus.ps1"
-        if (Test-Path $buildScript) { & $buildScript }
-        if (Test-Path $menuScript) { & $menuScript }
+        if (Test-Path $buildScript) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $buildScript
+            if ($LASTEXITCODE -ne 0) { throw "build.ps1 failed with exit code $LASTEXITCODE" }
+        }
+        if (Test-Path $menuScript) {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $menuScript
+            if ($LASTEXITCODE -ne 0) { throw "install-menus.ps1 failed with exit code $LASTEXITCODE" }
+        }
     }
+
+    # Record installed version only after registration succeeds
+    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($VersionFile, $LatestTag, $Utf8NoBom)
 
     Write-Host ""
     Write-Host ("Successfully updated QuickConvert to {0}!" -f $LatestTag) -ForegroundColor Green
+    if ($Mode -eq "Native") {
+        Write-Host (J "\u53F3\u30AF\u30EA\u30C3\u30AF\u30E1\u30CB\u30E5\u30FC\u306B\u8868\u793A\u3055\u308C\u306A\u3044\u5834\u5408\u306F\u3001\u30A8\u30AF\u30B9\u30D7\u30ED\u30FC\u30E9\u30FC\u3092\u518D\u8D77\u52D5\u3057\u3066\u304F\u3060\u3055\u3044\u3002") -ForegroundColor Gray
+    }
     Pause-IfInteractive
 }
 catch {

@@ -31,6 +31,25 @@ function Test-SmartAppControlOn {
     }
 }
 
+function Test-DeveloperModeOn {
+    try {
+        $p = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" -Name "AllowDevelopmentWithoutDevLicense" -ErrorAction Stop
+        return ($p.AllowDevelopmentWithoutDevLicense -eq 1)
+    } catch {
+        return $false
+    }
+}
+
+function Show-DeveloperModeWarning {
+    Write-Host ""
+    Write-Host "========================================================================" -ForegroundColor Red
+    Write-Host (J "[\u8B66\u544A] \u958B\u767A\u8005\u30E2\u30FC\u30C9 (Developer Mode) \u304C\u30AA\u30D5\u3067\u3059") -ForegroundColor Red
+    Write-Host "========================================================================" -ForegroundColor Red
+    Write-Host ""
+    Write-Host (J "\u30CD\u30A4\u30C6\u30A3\u30D6\u7248\u3092 Windows \u306B\u767B\u9332\u3059\u308B\u306B\u306F\u300C\u958B\u767A\u8005\u30E2\u30FC\u30C9\u300D\u3092\u30AA\u30F3\u306B\u3059\u308B\u5FC5\u8981\u304C\u3042\u308A\u307E\u3059\u3002") -ForegroundColor Yellow
+    Write-Host (J "  \u8A2D\u5B9A > \u30B7\u30B9\u30C6\u30E0 > \u958B\u767A\u8005\u5411\u3051 > \u958B\u767A\u8005\u30E2\u30FC\u30C9 \u3092\u30AA\u30F3\u306B\u3057\u3066\u304B\u3089\u518D\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002") -ForegroundColor Cyan
+}
+
 function Show-SmartAppControlWarning {
     Write-Host ""
     Write-Host "========================================================================" -ForegroundColor Red
@@ -80,6 +99,12 @@ if (-not (Test-Path $DllPath) -or -not (Test-Path $ExePath)) {
     Write-Host "QuickConvertShell.dll or QuickConvert.exe is missing in $PkgDir" -ForegroundColor Red
     Pause-IfInteractive
     exit 1
+}
+
+if (($Mode -eq "Register") -and (-not (Test-DeveloperModeOn))) {
+    Show-DeveloperModeWarning
+    Pause-IfInteractive
+    exit 3
 }
 
 # Remove existing version if already registered
