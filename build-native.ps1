@@ -113,7 +113,7 @@ $manifestStamped = [Regex]::Replace($manifestRaw, '(<Identity\b[^>]*?\bVersion="
 [System.IO.File]::WriteAllText((Join-Path $NativeDir "version.txt"), $displayTag, $Utf8NoBom)
 
 Copy-Item (Join-Path $Root "presets.json") (Join-Path $NativeDir "presets.json") -Force
-foreach ($helper in @("install-native.ps1", "uninstall-native.ps1", "update.ps1", "update.bat")) {
+foreach ($helper in @("install-native.ps1", "install-native.bat", "uninstall-native.ps1", "update.ps1", "update.bat")) {
     $srcHelper = Join-Path $Root $helper
     if (Test-Path $srcHelper) {
         Copy-Item $srcHelper (Join-Path $NativeDir $helper) -Force
